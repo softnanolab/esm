@@ -5,6 +5,8 @@
 import typing as T
 from dataclasses import dataclass
 from functools import partial
+from typing import Dict
+import time
 
 import torch
 import torch.nn as nn
@@ -45,6 +47,23 @@ esm_registry = {
     "esm2_3B_270K": partial(load_fn, "esm2_t36_3B_UR50D_500K"),
     "esm2_15B": esm.pretrained.esm2_t48_15B_UR50D,
 }
+
+
+def benchmark(start_time: int) -> Dict[str, float]:
+    """
+    Benchmark the time and memory usage of the model.
+
+    Args:
+        start_time (int): The start time of the benchmark.
+
+    Returns:
+        dict[str, float]: A dictionary containing the time and memory usage of the model.
+    """
+    return {
+        "time": time.time() - start_time,
+        "current memory": torch.cuda.memory_allocated() / 1024**3,
+        "peak memory": torch.cuda.max_memory_allocated() / 1024**3,
+    }
 
 
 class ESMFold(nn.Module):
@@ -171,6 +190,9 @@ class ESMFold(nn.Module):
             num_recycles (int): How many recycle iterations to perform. If None, defaults to training max
                 recycles, which is 3.
         """
+        # ---------- START TIME ---------- #
+        start_time = time.time()
+        benchmark_stats = {}
 
         if mask is None:
             mask = torch.ones_like(aa)
@@ -190,6 +212,8 @@ class ESMFold(nn.Module):
 
         esm_s, esm_z = self._compute_language_model_representations(esmaa)
 
+        benchmark_stats["after_esm_lm"] = benchmark(start_time)
+
         # Convert esm_s to the precision used by the trunk and
         # the structure module. These tensors may be a lower precision if, for example,
         # we're running the language model in fp16 precision.
@@ -208,6 +232,8 @@ class ESMFold(nn.Module):
             s_z_0 = s_s_0.new_zeros(B, L, L, self.cfg.trunk.pairwise_state_dim)
 
         s_s_0 += self.embedding(aa)
+        
+        benchmark_stats["before_trunk"] = benchmark(start_time)
 
         structure: dict = self.trunk(
             s_s_0, s_z_0, aa, residx, mask, no_recycles=num_recycles
@@ -228,6 +254,7 @@ class ESMFold(nn.Module):
                 "states",
             ]
         }
+        benchmark_stats["after_trunk"] = benchmark(start_time)
 
         disto_logits = self.distogram_head(structure["s_z"])
         disto_logits = (disto_logits + disto_logits.transpose(1, 2)) / 2
@@ -274,8 +301,9 @@ class ESMFold(nn.Module):
                 ptm_logits, max_bin=31, no_bins=self.distogram_bins
             )
         )
+        benchmark_stats["after_secondary_heads"] = benchmark(start_time)
 
-        return structure
+        return structure, benchmark_stats
 
     @torch.no_grad()
     def infer(
@@ -319,7 +347,7 @@ class ESMFold(nn.Module):
             lambda x: x.to(self.device), (aatype, mask, residx, linker_mask)
         )
 
-        output = self.forward(
+        output, benchmark_stats = self.forward(
             aatype,
             mask=mask,
             residx=residx,
@@ -336,7 +364,7 @@ class ESMFold(nn.Module):
         ) / output["atom37_atom_exists"].sum(dim=(1, 2))
         output["chain_index"] = chain_index
 
-        return output
+        return output, benchmark_stats
 
     def output_to_pdb(self, output: T.Dict) -> T.List[str]:
         """Returns the pbd (file) string from the model given the model output."""

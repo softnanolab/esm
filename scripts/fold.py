@@ -17,6 +17,8 @@ import torch
 
 import esm
 from esm.data import read_fasta
+import time
+import json
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -123,6 +125,9 @@ def create_parser():
 
 
 def run(args):
+    overall_benchmark = {}
+    start_time = time.time()
+
     if not args.fasta.exists():
         raise FileNotFoundError(args.fasta)
 
@@ -141,6 +146,8 @@ def run(args):
         torch.hub.set_dir(args.model_dir)
 
     model = esm.pretrained.esmfold_v1()
+
+    overall_benchmark["after_load_model"] = time.time() - start_time
 
 
     model = model.eval()
@@ -161,7 +168,8 @@ def run(args):
     for headers, sequences in batched_sequences:
         start = timer()
         try:
-            output = model.infer(sequences, num_recycles=args.num_recycles)
+            output, benchmark_stats = model.infer(sequences, num_recycles=args.num_recycles)
+            overall_benchmark[headers[0]] = benchmark_stats
         except RuntimeError as e:
             if e.args[0].startswith("CUDA out of memory"):
                 if len(sequences) > 1:
@@ -194,6 +202,9 @@ def run(args):
                 f"pTM {ptm:0.3f} in {time_string}. "
                 f"{num_completed} / {num_sequences} completed."
             )
+    
+    with open(args.pdb / "benchmark.json", "w") as f:
+        json.dump(overall_benchmark, f, indent=4)
 
 
 def main():
