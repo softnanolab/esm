@@ -61,8 +61,8 @@ def benchmark(start_time: int) -> Dict[str, float]:
     """
     return {
         "time": time.time() - start_time,
-        "current memory": torch.cuda.memory_allocated() / 1024**3,
-        "peak memory": torch.cuda.max_memory_allocated() / 1024**3,
+        "current_memory": torch.cuda.memory_allocated() / 1024**3,
+        "peak_memory": torch.cuda.max_memory_allocated() / 1024**3,
     }
 
 
