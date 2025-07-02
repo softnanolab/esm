@@ -121,6 +121,8 @@ def create_parser():
     )
     parser.add_argument("--cpu-only", help="CPU only", action="store_true")
     parser.add_argument("--cpu-offload", help="Enable CPU offloading", action="store_true")
+    parser.add_argument("--residue-index-offset", help="Residue index offset", type=int, default=512)
+    parser.add_argument("--chain-linker", help="Chain linker", type=str, default="G"*25)
     return parser
 
 
@@ -168,8 +170,15 @@ def run(args):
     for headers, sequences in batched_sequences:
         start = timer()
         try:
-            output, benchmark_stats = model.infer(sequences, num_recycles=args.num_recycles)
+            output, benchmark_stats = model.infer(
+                sequences, 
+                num_recycles=args.num_recycles,
+                residue_index_offset=args.residue_index_offset,
+                chain_linker=args.chain_linker
+            )
             overall_benchmark[headers[0]] = benchmark_stats
+            # Reset peak memory stats
+            torch.cuda.reset_peak_memory_stats()
         except RuntimeError as e:
             if e.args[0].startswith("CUDA out of memory"):
                 if len(sequences) > 1:
@@ -202,7 +211,9 @@ def run(args):
                 f"pTM {ptm:0.3f} in {time_string}. "
                 f"{num_completed} / {num_sequences} completed."
             )
-    
+
+            overall_benchmark[header]["total_time_used"] = tottime
+
     with open(args.pdb / "benchmark.json", "w") as f:
         json.dump(overall_benchmark, f, indent=4)
 
