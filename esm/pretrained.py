@@ -30,7 +30,7 @@ def weights_directory(weights_dir=None):
     `weights_dir` gives a model its own directory, so a data root can hold its weights
     and be complete. `None` keeps upstream's behaviour.
     """
-    if weights_dir is None:
+    if not weights_dir:
         return os.path.join(torch.hub.get_dir(), "checkpoints")
     return str(weights_dir)
 
