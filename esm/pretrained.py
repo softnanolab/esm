@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import re
 import urllib
 import warnings
@@ -21,21 +22,37 @@ def _has_regression_weights(model_name):
     return not ("esm1v" in model_name or "esm_if" in model_name or "270K" in model_name or "500K" in model_name)
 
 
-def load_model_and_alphabet(model_name):
+def weights_directory(weights_dir=None):
+    """Where a by-name download is read from and written to.
+
+    FORK CHANGE. Upstream has no such argument: every download lands in the one
+    `torch.hub.get_dir()/checkpoints`, shared by every project on the machine. Passing
+    `weights_dir` gives a model its own directory, so a data root can hold its weights
+    and be complete. `None` keeps upstream's behaviour.
+    """
+    if weights_dir is None:
+        return os.path.join(torch.hub.get_dir(), "checkpoints")
+    return str(weights_dir)
+
+
+def load_model_and_alphabet(model_name, weights_dir=None):
     if model_name.endswith(".pt"):  # treat as filepath
         return load_model_and_alphabet_local(model_name)
     else:
-        return load_model_and_alphabet_hub(model_name)
+        return load_model_and_alphabet_hub(model_name, weights_dir=weights_dir)
 
 
-def load_hub_workaround(url):
+def load_hub_workaround(url, weights_dir=None):
+    directory = weights_directory(weights_dir)
     try:
-        data = torch.hub.load_state_dict_from_url(url, progress=False, map_location="cpu")
+        data = torch.hub.load_state_dict_from_url(
+            url, model_dir=directory, progress=False, map_location="cpu"
+        )
     except RuntimeError:
         # Pytorch version issue - see https://github.com/pytorch/pytorch/issues/43106
         fn = Path(url).name
         data = torch.load(
-            f"{torch.hub.get_dir()}/checkpoints/{fn}",
+            os.path.join(directory, fn),
             map_location="cpu",
         )
     except urllib.error.HTTPError as e:
@@ -43,24 +60,26 @@ def load_hub_workaround(url):
     return data
 
 
-def load_regression_hub(model_name):
+def load_regression_hub(model_name, weights_dir=None):
     url = f"https://dl.fbaipublicfiles.com/fair-esm/regression/{model_name}-contact-regression.pt"
-    regression_data = load_hub_workaround(url)
+    regression_data = load_hub_workaround(url, weights_dir=weights_dir)
     return regression_data
 
 
-def _download_model_and_regression_data(model_name):
+def _download_model_and_regression_data(model_name, weights_dir=None):
     url = f"https://dl.fbaipublicfiles.com/fair-esm/models/{model_name}.pt"
-    model_data = load_hub_workaround(url)
+    model_data = load_hub_workaround(url, weights_dir=weights_dir)
     if _has_regression_weights(model_name):
-        regression_data = load_regression_hub(model_name)
+        regression_data = load_regression_hub(model_name, weights_dir=weights_dir)
     else:
         regression_data = None
     return model_data, regression_data
 
 
-def load_model_and_alphabet_hub(model_name):
-    model_data, regression_data = _download_model_and_regression_data(model_name)
+def load_model_and_alphabet_hub(model_name, weights_dir=None):
+    model_data, regression_data = _download_model_and_regression_data(
+        model_name, weights_dir=weights_dir
+    )
     return load_model_and_alphabet_core(model_name, model_data, regression_data)
 
 
@@ -221,122 +240,122 @@ def load_model_and_alphabet_core(model_name, model_data, regression_data=None):
     return model, alphabet
 
 
-def esm1_t34_670M_UR50S():
+def esm1_t34_670M_UR50S(weights_dir=None):
     """34 layer transformer model with 670M params, trained on Uniref50 Sparse.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1_t34_670M_UR50S")
+    return load_model_and_alphabet_hub("esm1_t34_670M_UR50S", weights_dir=weights_dir)
 
 
-def esm1_t34_670M_UR50D():
+def esm1_t34_670M_UR50D(weights_dir=None):
     """34 layer transformer model with 670M params, trained on Uniref50 Dense.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1_t34_670M_UR50D")
+    return load_model_and_alphabet_hub("esm1_t34_670M_UR50D", weights_dir=weights_dir)
 
 
-def esm1_t34_670M_UR100():
+def esm1_t34_670M_UR100(weights_dir=None):
     """34 layer transformer model with 670M params, trained on Uniref100.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1_t34_670M_UR100")
+    return load_model_and_alphabet_hub("esm1_t34_670M_UR100", weights_dir=weights_dir)
 
 
-def esm1_t12_85M_UR50S():
+def esm1_t12_85M_UR50S(weights_dir=None):
     """12 layer transformer model with 85M params, trained on Uniref50 Sparse.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1_t12_85M_UR50S")
+    return load_model_and_alphabet_hub("esm1_t12_85M_UR50S", weights_dir=weights_dir)
 
 
-def esm1_t6_43M_UR50S():
+def esm1_t6_43M_UR50S(weights_dir=None):
     """6 layer transformer model with 43M params, trained on Uniref50 Sparse.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1_t6_43M_UR50S")
+    return load_model_and_alphabet_hub("esm1_t6_43M_UR50S", weights_dir=weights_dir)
 
 
-def esm1b_t33_650M_UR50S():
+def esm1b_t33_650M_UR50S(weights_dir=None):
     """33 layer transformer model with 650M params, trained on Uniref50 Sparse.
     This is our best performing model, which will be described in a future publication.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1b_t33_650M_UR50S")
+    return load_model_and_alphabet_hub("esm1b_t33_650M_UR50S", weights_dir=weights_dir)
 
 
-def esm_msa1_t12_100M_UR50S():
+def esm_msa1_t12_100M_UR50S(weights_dir=None):
     warnings.warn(
         "This model had a minor bug in the positional embeddings, "
         "please use ESM-MSA-1b: esm.pretrained.esm_msa1b_t12_100M_UR50S()",
     )
-    return load_model_and_alphabet_hub("esm_msa1_t12_100M_UR50S")
+    return load_model_and_alphabet_hub("esm_msa1_t12_100M_UR50S", weights_dir=weights_dir)
 
 
-def esm_msa1b_t12_100M_UR50S():
-    return load_model_and_alphabet_hub("esm_msa1b_t12_100M_UR50S")
+def esm_msa1b_t12_100M_UR50S(weights_dir=None):
+    return load_model_and_alphabet_hub("esm_msa1b_t12_100M_UR50S", weights_dir=weights_dir)
 
 
-def esm1v_t33_650M_UR90S():
+def esm1v_t33_650M_UR90S(weights_dir=None):
     """33 layer transformer model with 650M params, trained on Uniref90.
     This is model 1 of a 5 model ensemble.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_1")
+    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_1", weights_dir=weights_dir)
 
 
-def esm1v_t33_650M_UR90S_1():
+def esm1v_t33_650M_UR90S_1(weights_dir=None):
     """33 layer transformer model with 650M params, trained on Uniref90.
     This is model 1 of a 5 model ensemble.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_1")
+    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_1", weights_dir=weights_dir)
 
 
-def esm1v_t33_650M_UR90S_2():
+def esm1v_t33_650M_UR90S_2(weights_dir=None):
     """33 layer transformer model with 650M params, trained on Uniref90.
     This is model 2 of a 5 model ensemble.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_2")
+    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_2", weights_dir=weights_dir)
 
 
-def esm1v_t33_650M_UR90S_3():
+def esm1v_t33_650M_UR90S_3(weights_dir=None):
     """33 layer transformer model with 650M params, trained on Uniref90.
     This is model 3 of a 5 model ensemble.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_3")
+    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_3", weights_dir=weights_dir)
 
 
-def esm1v_t33_650M_UR90S_4():
+def esm1v_t33_650M_UR90S_4(weights_dir=None):
     """33 layer transformer model with 650M params, trained on Uniref90.
     This is model 4 of a 5 model ensemble.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_4")
+    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_4", weights_dir=weights_dir)
 
 
-def esm1v_t33_650M_UR90S_5():
+def esm1v_t33_650M_UR90S_5(weights_dir=None):
     """33 layer transformer model with 650M params, trained on Uniref90.
     This is model 5 of a 5 model ensemble.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_5")
+    return load_model_and_alphabet_hub("esm1v_t33_650M_UR90S_5", weights_dir=weights_dir)
 
 
-def esm_if1_gvp4_t16_142M_UR50():
+def esm_if1_gvp4_t16_142M_UR50(weights_dir=None):
     """Inverse folding model with 142M params, with 4 GVP-GNN layers, 8
     Transformer encoder layers, and 8 Transformer decoder layers, trained on
     CATH structures and 12 million alphafold2 predicted structures from UniRef50
@@ -344,60 +363,60 @@ def esm_if1_gvp4_t16_142M_UR50():
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm_if1_gvp4_t16_142M_UR50")
+    return load_model_and_alphabet_hub("esm_if1_gvp4_t16_142M_UR50", weights_dir=weights_dir)
 
 
-def esm2_t6_8M_UR50D():
+def esm2_t6_8M_UR50D(weights_dir=None):
     """6 layer ESM-2 model with 8M params, trained on UniRef50.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm2_t6_8M_UR50D")
+    return load_model_and_alphabet_hub("esm2_t6_8M_UR50D", weights_dir=weights_dir)
 
 
-def esm2_t12_35M_UR50D():
+def esm2_t12_35M_UR50D(weights_dir=None):
     """12 layer ESM-2 model with 35M params, trained on UniRef50.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm2_t12_35M_UR50D")
+    return load_model_and_alphabet_hub("esm2_t12_35M_UR50D", weights_dir=weights_dir)
 
 
-def esm2_t30_150M_UR50D():
+def esm2_t30_150M_UR50D(weights_dir=None):
     """30 layer ESM-2 model with 150M params, trained on UniRef50.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm2_t30_150M_UR50D")
+    return load_model_and_alphabet_hub("esm2_t30_150M_UR50D", weights_dir=weights_dir)
 
 
-def esm2_t33_650M_UR50D():
+def esm2_t33_650M_UR50D(weights_dir=None):
     """33 layer ESM-2 model with 650M params, trained on UniRef50.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm2_t33_650M_UR50D")
+    return load_model_and_alphabet_hub("esm2_t33_650M_UR50D", weights_dir=weights_dir)
 
 
-def esm2_t36_3B_UR50D():
+def esm2_t36_3B_UR50D(weights_dir=None):
     """36 layer ESM-2 model with 3B params, trained on UniRef50.
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm2_t36_3B_UR50D")
+    return load_model_and_alphabet_hub("esm2_t36_3B_UR50D", weights_dir=weights_dir)
 
 
-def esm2_t48_15B_UR50D():
+def esm2_t48_15B_UR50D(weights_dir=None):
     """48 layer ESM-2 model with 15B params, trained on UniRef50.
     If you have OOM while loading this model, please refer to README
     on how to employ FSDP and ZeRO CPU offloading
 
     Returns a tuple of (Model, Alphabet).
     """
-    return load_model_and_alphabet_hub("esm2_t48_15B_UR50D")
+    return load_model_and_alphabet_hub("esm2_t48_15B_UR50D", weights_dir=weights_dir)
 
 
-def esmfold_v0():
+def esmfold_v0(weights_dir=None):
     """
     ESMFold v0 model with 3B ESM-2, 48 folding blocks.
     This version was used for the paper (Lin et al, 2022). It was trained 
@@ -405,10 +424,10 @@ def esmfold_v0():
     and the CAMEO validation and test set reported there.
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_v0()
+    return esm.esmfold.v1.pretrained.esmfold_v0(weights_dir=weights_dir)
 
 
-def esmfold_v1():
+def esmfold_v1(weights_dir=None):
     """
     ESMFold v1 model using 3B ESM-2, 48 folding blocks.
     ESMFold provides fast high accuracy atomic level structure prediction
@@ -417,9 +436,9 @@ def esmfold_v1():
     protein sequence.
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_v1()
+    return esm.esmfold.v1.pretrained.esmfold_v1(weights_dir=weights_dir)
 
-def esmfold_structure_module_only_8M():
+def esmfold_structure_module_only_8M(weights_dir=None):
     """
     ESMFold baseline model using 8M ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 500K updates.
@@ -428,10 +447,10 @@ def esmfold_structure_module_only_8M():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_8M()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_8M(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_8M_270K():
+def esmfold_structure_module_only_8M_270K(weights_dir=None):
     """
     ESMFold baseline model using 8M ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 270K updates.
@@ -440,10 +459,10 @@ def esmfold_structure_module_only_8M_270K():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_8M_270K()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_8M_270K(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_35M():
+def esmfold_structure_module_only_35M(weights_dir=None):
     """
     ESMFold baseline model using 35M ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 500K updates.
@@ -452,10 +471,10 @@ def esmfold_structure_module_only_35M():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_35M()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_35M(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_35M_270K():
+def esmfold_structure_module_only_35M_270K(weights_dir=None):
     """
     ESMFold baseline model using 35M ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 270K updates.
@@ -464,10 +483,10 @@ def esmfold_structure_module_only_35M_270K():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_35M_270K()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_35M_270K(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_150M():
+def esmfold_structure_module_only_150M(weights_dir=None):
     """
     ESMFold baseline model using 150M ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 500K updates.
@@ -476,10 +495,10 @@ def esmfold_structure_module_only_150M():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_150M()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_150M(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_150M_270K():
+def esmfold_structure_module_only_150M_270K(weights_dir=None):
     """
     ESMFold baseline model using 150M ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 270K updates.
@@ -488,10 +507,10 @@ def esmfold_structure_module_only_150M_270K():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_150M_270K()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_150M_270K(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_650M():
+def esmfold_structure_module_only_650M(weights_dir=None):
     """
     ESMFold baseline model using 650M ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 500K updates.
@@ -500,10 +519,10 @@ def esmfold_structure_module_only_650M():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_650M()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_650M(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_650M_270K():
+def esmfold_structure_module_only_650M_270K(weights_dir=None):
     """
     ESMFold baseline model using 650M ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 270K updates.
@@ -512,10 +531,10 @@ def esmfold_structure_module_only_650M_270K():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_650M_270K()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_650M_270K(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_3B():
+def esmfold_structure_module_only_3B(weights_dir=None):
     """
     ESMFold baseline model using 3B ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 500K updates.
@@ -524,10 +543,10 @@ def esmfold_structure_module_only_3B():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_3B()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_3B(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_3B_270K():
+def esmfold_structure_module_only_3B_270K(weights_dir=None):
     """
     ESMFold baseline model using 3B ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 270K updates.
@@ -536,10 +555,10 @@ def esmfold_structure_module_only_3B_270K():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_3B_270K()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_3B_270K(weights_dir=weights_dir)
 
 
-def esmfold_structure_module_only_15B():
+def esmfold_structure_module_only_15B(weights_dir=None):
     """
     ESMFold baseline model using 15B ESM-2, 0 folding blocks.
     ESM-2 here is trained out to 270K updates.
@@ -549,4 +568,4 @@ def esmfold_structure_module_only_15B():
     See table S1 in (Lin et al, 2022).
     """
     import esm.esmfold.v1.pretrained
-    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_15B()
+    return esm.esmfold.v1.pretrained.esmfold_structure_module_only_15B(weights_dir=weights_dir)
