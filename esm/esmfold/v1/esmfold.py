@@ -67,7 +67,16 @@ def benchmark(start_time: int) -> Dict[str, float]:
 
 
 class ESMFold(nn.Module):
-    def __init__(self, esmfold_config=None, **kwargs):
+    def __init__(self, esmfold_config=None, weights_dir=None, **kwargs):
+        """FORK CHANGE: `weights_dir` says where the ESM-2 language model is fetched from.
+
+        It is a constructor argument rather than a config field because the config is
+        serialised into a checkpoint, and where a machine keeps its files is not a
+        property of the model. `None` keeps upstream's shared `torch.hub` cache.
+
+        Every entry in `esm_registry` accepts it, so it passes as a keyword regardless of
+        which language model `cfg.esm_type` names.
+        """
         super().__init__()
 
         self.cfg = esmfold_config if esmfold_config else ESMFoldConfig(**kwargs)
@@ -75,7 +84,7 @@ class ESMFold(nn.Module):
 
         self.distogram_bins = 64
 
-        self.esm, self.esm_dict = esm_registry.get(cfg.esm_type)()
+        self.esm, self.esm_dict = esm_registry.get(cfg.esm_type)(weights_dir=weights_dir)
 
         self.esm.requires_grad_(False)
         self.esm.half()

@@ -2,6 +2,45 @@
 
 [![atlas](https://user-images.githubusercontent.com/3605224/199301187-a9e38b3f-71a7-44be-94f4-db0d66143c53.png)](https://esmatlas.com)
 
+## This fork: `weights_dir`
+
+This is `softnanolab/esm`, a fork. **It differs from upstream in one way, and upstream's
+documentation does not describe it.**
+
+Every loader that fetches weights **by name** takes an optional `weights_dir`:
+
+```python
+import esm
+
+model = esm.pretrained.esmfold_v1(weights_dir="/data/weights/esmfold")
+model, alphabet = esm.pretrained.esm2_t36_3B_UR50D(weights_dir="/data/weights/esm2")
+```
+
+Upstream sends every such download to `torch.hub.get_dir()/checkpoints`, one directory
+shared by every project on the machine. `TORCH_HOME` moves that directory but cannot
+split it, so a project that wants its weights beside its own data cannot have them.
+
+Omitting the argument, or passing `None`, is exactly upstream's behaviour: nothing
+changes for existing code.
+
+The argument is threaded rather than read from the environment, so the caller can see
+where its weights went. It reaches:
+
+- `esm.pretrained.load_model_and_alphabet`, `load_model_and_alphabet_hub`,
+  `load_hub_workaround`, `load_regression_hub`, and every `esm1*` / `esm2*` /
+  `esmfold_*` convenience loader;
+- `esm.esmfold.v1.pretrained._load_model` and its `esmfold_*` loaders;
+- `ESMFold.__init__`, which is how it reaches the **ESM-2 language model** underneath the
+  folding trunk. That second download is the reason this is not a one-line change: an
+  explicit path to the trunk alone still leaves 5.3 GB in the shared cache.
+
+It is a constructor argument on `ESMFold`, not a field of `ESMFoldConfig`, because the
+config is serialised into checkpoints and where a machine keeps its files is not a
+property of the model.
+
+Paths given outright — a `.pt` filename passed as `model_name`, or
+`load_model_and_alphabet_local` — are unaffected; they already name the file.
+
 ***Update April 2023:*** Code for the two simultaneous preprints on protein design is now released! Code for "Language models generalize beyond natural proteins" is under [examples/lm-design/](examples/lm-design/). Code for "A high-level programming language for generative protein design" is under [examples/protein-programming-language/](examples/protein-programming-language/).
 
 This repository contains code and pre-trained weights for **Transformer protein language models** from the Meta Fundamental AI Research Protein Team (FAIR), including our state-of-the-art [**ESM-2** and **ESMFold**](#esmfold), as well as [**MSA Transformer**](https://www.biorxiv.org/content/10.1101/2021.02.12.430858v1), [**ESM-1v**](#zs_variant) for predicting variant effects and [**ESM-IF1**](#invf) for inverse folding.
